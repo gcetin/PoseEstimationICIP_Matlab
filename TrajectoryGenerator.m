@@ -1,0 +1,32 @@
+classdef TrajectoryGenerator
+    methods (Static)
+        function points = create_dense_trajectory(shapeType, appendFlag, dense_deltaT)
+            SHAPE_SIZE = 5.0;
+            t = 0:dense_deltaT:(2*pi);
+            
+            if shapeType == 0 % EIGHT
+                Y_ideal = SHAPE_SIZE * sin(t);
+                X_ideal = SHAPE_SIZE * sin(t) .* cos(t);
+            else
+                % Circle fallback
+                X_ideal = SHAPE_SIZE * cos(t);
+                Y_ideal = SHAPE_SIZE * sin(t);
+            end
+            
+            Z_ideal = zeros(size(t));
+            points = [X_ideal; Y_ideal; Z_ideal];
+            
+            if appendFlag
+                % Rotate 45 deg Z (approx 0.78 rad)
+                eul = [deg2rad(45), 0, 0];
+                R = eul2rotm(eul, 'ZYX');
+                points_rot = R * points;
+                points = [points, points_rot];
+            end
+        end
+        
+        function sparse_traj = sample_trajectory(dense_traj, ratio)
+            sparse_traj = dense_traj(:, 1:ratio:end);
+        end
+    end
+end
