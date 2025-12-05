@@ -129,6 +129,11 @@ function stats = plotResults(fName, plot_all_angles)
     phi_err   = angle_diff_deg(estAngPhi, gtAngPhi);
     theta_err = angle_diff_deg(estAngTheta, gtAngTheta);
     psi_err   = angle_diff_deg(estAngPsi, gtAngPsi);
+
+    % % Angle Diffs
+    % phi_err   = angle_diff_deg(abs(estAngPhi), abs(gtAngPhi));
+    % theta_err = angle_diff_deg(abs(estAngTheta), abs(gtAngTheta));
+    % psi_err   = angle_diff_deg(abs(estAngPsi), abs(gtAngPsi));    
     
     % --- 6. Plotting ---
 

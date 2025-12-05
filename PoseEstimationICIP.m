@@ -4,7 +4,7 @@ function PoseEstimationICIP()
 
     % Configuration
     folderNameList = {'DataFolder_1920x1080_500_IDEAL_REL_MOTION_TRANS_XYZ_PAN_3D_EIGHT'};
-    transErrList = {[1.0, 1.0, 5.0]};
+    transErrList = {[0.0, 0.0, 0.0]};
     angErrList = [0.0];
 
     for f = 1:length(folderNameList)
@@ -48,10 +48,10 @@ function run_experiment(expFolderName, angStd, transStd)
     idealPts3d = TrajectoryGenerator.sample_trajectory(moreDense3d, 5);
 
     % Optimization Settings
-    MAX_ITERATIONS = 200;
-    MIN_COST_THRESHOLD = 1000.0;
+    MAX_ITERATIONS = 500;
+    MIN_COST_THRESHOLD = 100.0;
     REL_COST_DELTA = 1e-3;
-    COST_STABILITY_PATIENCE = 5;
+    COST_STABILITY_PATIENCE = Inf;
 
     % Logging setup (Skipped file creation for brevity, printing to console)
     fprintf('Starting Experiment: %s\n', expFolderName);
@@ -68,6 +68,10 @@ function run_experiment(expFolderName, angStd, transStd)
 
     for r = 1:NUM_REPEATS
         for i = 1:numSamples
+
+            if i==67
+                dur =1;
+            end
             % Get observed 2D points (N x 2)
             point2d = squeeze(trajData(i, :, :));
             numPoints = size(point2d, 1);
@@ -79,7 +83,7 @@ function run_experiment(expFolderName, angStd, transStd)
             gtTransMat = UtilityFunctions.getGtTransMat(gtDataDict, i);
             
             % Add Noise for initialization
-            noisyGtTransMat = UtilityFunctions.addNoiseToPose(gtTransMat, angStd, transStd);
+            [noisyGtTransMat, yawErr, transErr] = UtilityFunctions.addNoiseToPose(gtTransMat, angStd, transStd);
             currentTransMat = noisyGtTransMat;
 
             % Init Loop variables
@@ -94,7 +98,7 @@ function run_experiment(expFolderName, angStd, transStd)
             options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', ...
                                    'Display', 'off', 'MaxFunctionEvaluations', 100000, ...
                                    'FunctionTolerance', 1e-8);
-            tic;
+            % tic;
             % --- Iterative Refinement ---
             iteration = 0;
             while (iteration < MAX_ITERATIONS) && (current_cost > MIN_COST_THRESHOLD) && (stability_counter < COST_STABILITY_PATIENCE)
@@ -152,43 +156,69 @@ function run_experiment(expFolderName, angStd, transStd)
                 prev_cost = current_cost;
                 iteration = iteration + 1;
             end
-            toc;
+            % toc;
 
+            fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d\n', i, iteration, current_cost, stability_counter);
 
-            % --- VISUALIZATION AFTER OPTIMIZATION ---
-            if PLOT_FIGURES
-                % 1. Update cloud to FINAL pose
+            % --- FINAL VISUALIZATION ---
+            if PLOT_FIGURES && stability_counter == 10
+                % 1. Transform cloud to FINAL estimated pose
                 moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
-                
-                % 2. Initialize Figure ONCE before the loop
-                figure(100); 
-                clf;       % Clear any old data
-                hold on;   % Start holding plots
-                title(sprintf('Growing Scene: Sample %d', i));
-                
-                fprintf('Building scene for Sample %d...\n', i);
-                
-                % 3. Loop to grow the scene
+
+                % 2. Re-calculate all matches for the final pose
+                % (We need the indices to draw lines to the correct points)
+                all_best_indices = zeros(numPoints, 1);
+
+                % Fast loop to get indices (calculation only, no plotting)
                 for k = 1:numPoints
-                    % Find best match for this ray in the final cloud
-                    [~, best_idx] = UtilityFunctions.project_cloud_onto_ray_fast(rayOrigins(k,:), rayDirections(k,:), moreDense3dInCamFrame');
-                    
-                    % Add this ray and its points to the existing plot
-                    UtilityFunctions.visualize_ray_projection(rayOrigins(k,:), rayDirections(k,:), moreDense3dInCamFrame, best_idx);
-                    
-                    % Optional: Adjust view to follow the action?
-                    % view(3); 
-                    
-                    % Fast pause for animation effect
-                    pause(0.01); 
+                    [~, idx] = UtilityFunctions.project_cloud_onto_ray_fast(rayOrigins(k,:), rayDirections(k,:), moreDense3dInCamFrame');
+                    all_best_indices(k) = idx;
                 end
-                hold off; % Stop holding after loop finishes
-            end               
+                
+                 yawErr, transErr
+
+                % 3. Visualize Everything At Once
+                fprintf('Plotting full scene for Sample %d...\n', i);
+                UtilityFunctions.visualize_entire_scene(rayOrigins, rayDirections, moreDense3dInCamFrame, all_best_indices, gtTransMat, currentTransMat);
+                % Optional: Pause so you can inspect it before the next sample starts
+                pause;
+            end
+
+
+            % % --- VISUALIZATION AFTER OPTIMIZATION ---
+            % if PLOT_FIGURES
+            %     % 1. Update cloud to FINAL pose
+            %     moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
+            % 
+            %     % 2. Initialize Figure ONCE before the loop
+            %     figure(100); 
+            %     clf;       % Clear any old data
+            %     hold on;   % Start holding plots
+            %     title(sprintf('Growing Scene: Sample %d', i));
+            % 
+            %     fprintf('Building scene for Sample %d...\n', i);
+            % 
+            %     % 3. Loop to grow the scene
+            %     for k = 1:numPoints
+            %         % Find best match for this ray in the final cloud
+            %         [~, best_idx] = UtilityFunctions.project_cloud_onto_ray_fast(rayOrigins(k,:), rayDirections(k,:), moreDense3dInCamFrame');
+            % 
+            %         % Add this ray and its points to the existing plot
+            %         UtilityFunctions.visualize_ray_projection(rayOrigins(k,:), rayDirections(k,:), moreDense3dInCamFrame, best_idx);
+            % 
+            %         % Optional: Adjust view to follow the action?
+            %         % view(3); 
+            % 
+            %         % Fast pause for animation effect
+            %         pause(0.01); 
+            %     end
+            %     hold off; % Stop holding after loop finishes
+            % end               
 
             % <--- INSERT THIS LINE HERE --->
             % Visualize the projection for the last processed ray (j) and its best match
             % Note: moreDense3dInCamFrame is 3xN, matching the new function signature.
-            UtilityFunctions.visualize_ray_projection(rayOrigins(j,:), rayDirections(j,:), moreDense3dInCamFrame, best_idx);            
+            %UtilityFunctions.visualize_ray_projection(rayOrigins(j,:), rayDirections(j,:), moreDense3dInCamFrame, best_idx);            
 
             % --- LOGGING DATA START ---
             
@@ -227,9 +257,9 @@ function run_experiment(expFolderName, angStd, transStd)
 
             
             % Logging (Brief)
-            if mod(i, 100) == 0
-                fprintf('Sample %d | Iter: %d | Cost: %.4f\n', i, iteration, current_cost);
-            end
+            % if mod(i, 100) == 0
+            %     fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d\n', i, iteration, current_cost, stability_counter);
+            % end
         end
     end
     disp('DONE.');
