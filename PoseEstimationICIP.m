@@ -48,10 +48,10 @@ function run_experiment(expFolderName, angStd, transStd)
     idealPts3d = TrajectoryGenerator.sample_trajectory(moreDense3d, 5);
 
     % Optimization Settings
-    MAX_ITERATIONS = 500;
+    MAX_ITERATIONS = 1;
     MIN_COST_THRESHOLD = 100.0;
     REL_COST_DELTA = 1e-3;
-    COST_STABILITY_PATIENCE = Inf;
+    COST_STABILITY_PATIENCE = 10;
 
     % Logging setup (Skipped file creation for brevity, printing to console)
     fprintf('Starting Experiment: %s\n', expFolderName);
@@ -69,9 +69,6 @@ function run_experiment(expFolderName, angStd, transStd)
     for r = 1:NUM_REPEATS
         for i = 1:numSamples
 
-            if i==67
-                dur =1;
-            end
             % Get observed 2D points (N x 2)
             point2d = squeeze(trajData(i, :, :));
             numPoints = size(point2d, 1);
@@ -85,6 +82,8 @@ function run_experiment(expFolderName, angStd, transStd)
             % Add Noise for initialization
             [noisyGtTransMat, yawErr, transErr] = UtilityFunctions.addNoiseToPose(gtTransMat, angStd, transStd);
             currentTransMat = noisyGtTransMat;
+            currentTransMat = gtTransMat;
+
 
             % Init Loop variables
             current_cost = inf;
@@ -93,11 +92,16 @@ function run_experiment(expFolderName, angStd, transStd)
             
             % Initial Guess Vector (Rodrigues 1x3, Trans 1x3)
             initPoseGuess = UtilityFunctions.formInitialPoseGuess(currentTransMat);
+            % currentTransMat
+            initPoseGuess(2) = -initPoseGuess(2);
+
+            % moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, gtTransMat);
+            % UtilityFunctions.residuals(initPoseGuess, moreDense3dInCamFrame, 
             
             % Levenberg-Marquardt Options
             options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', ...
-                                   'Display', 'off', 'MaxFunctionEvaluations', 100000, ...
-                                   'FunctionTolerance', 1e-8);
+                                   'Display', 'iter', 'MaxFunctionEvaluations', 10000, ...
+                                   'FunctionTolerance', 1e-12);
             % tic;
             % --- Iterative Refinement ---
             iteration = 0;
@@ -106,7 +110,7 @@ function run_experiment(expFolderName, angStd, transStd)
                 % 1. Convert Dense Cloud to Camera Frame using CURRENT Pose
                 % (3 x N)
                 moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
-                
+                           
                 % 2. Correspondence Establishment
                 % For every ray, find the closest point in the dense cloud
                 closestPointToTheRayCoord = zeros(3, numPoints);
@@ -128,6 +132,10 @@ function run_experiment(expFolderName, angStd, transStd)
                 fun = @(x) UtilityFunctions.residuals(x, closestPointToTheRayCoord, point2d, Params.KK, Params.distCoeffs);
                 
                 [x_opt, resnorm, ~, exitflag] = lsqnonlin(fun, initPoseGuess, [], [], options);
+                % x_opt
+                % initPoseGuess
+                % resnorm
+                % xxx
                 
                 current_cost = resnorm; % Squared error sum
 
@@ -173,9 +181,10 @@ function run_experiment(expFolderName, angStd, transStd)
                 for k = 1:numPoints
                     [~, idx] = UtilityFunctions.project_cloud_onto_ray_fast(rayOrigins(k,:), rayDirections(k,:), moreDense3dInCamFrame');
                     all_best_indices(k) = idx;
-                end
-                
+                end              
+
                  yawErr, transErr
+
 
                 % 3. Visualize Everything At Once
                 fprintf('Plotting full scene for Sample %d...\n', i);
@@ -263,4 +272,5 @@ function run_experiment(expFolderName, angStd, transStd)
         end
     end
     disp('DONE.');
+    fclose(logFid);
 end
