@@ -9,7 +9,7 @@ function stats = plotResults(fName, plot_all_angles)
         plot_all_angles = false;
     end
     
-    close all;
+    % close all;
     
     % --- 1. Filename Parsing ---
     [~, name, ~] = fileparts(fName);

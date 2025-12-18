@@ -10,10 +10,9 @@ classdef DataLoader
             gtDataDict.X = gtTable.ideal_distance_x_m_;
             gtDataDict.Y = gtTable.ideal_distance_y_m_;
             gtDataDict.Z = gtTable.ideal_distance_z_m_;
-            gtDataDict.qw = gtTable.ideal_quat_w;
-            gtDataDict.qx = gtTable.ideal_quat_x;
-            gtDataDict.qy = gtTable.ideal_quat_y;
-            gtDataDict.qz = gtTable.ideal_quat_z;
+            gtDataDict.r0 = gtTable.ideal_rodrigues_x_rad_;
+            gtDataDict.r1 = gtTable.ideal_rodrigues_y_rad_;
+            gtDataDict.r2 = gtTable.ideal_rodrigues_z_rad_;    
             
             numSamples = height(gtTable);
             

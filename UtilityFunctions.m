@@ -72,16 +72,15 @@ classdef UtilityFunctions
 
         function T = getGtTransMat(gtData, idx)
             % gtData is a struct of arrays
-            qx = gtData.qx(idx);
-            qy = gtData.qy(idx);
-            qz = gtData.qz(idx);
-            qw = gtData.qw(idx);
+            r0 = gtData.r0(idx);
+            r1 = gtData.r1(idx);
+            r2 = gtData.r2(idx);
 
             tx = gtData.X(idx);
             ty = gtData.Y(idx);
             tz = gtData.Z(idx);
 
-            R = quat2rotm([qw, qx, qy, qz]);
+            R = UtilityFunctions.rodrigues([r0, r1, r2]);
             T = eye(4);
             T(1:3,1:3) = R;
             T(1:3,4) = [tx; ty; tz];

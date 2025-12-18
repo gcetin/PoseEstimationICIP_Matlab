@@ -1,24 +1,24 @@
-function PoseEstimationICIP()
+function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES)
     % Main entry point for Pose Estimation
-    clc; clear; close all;
+    % clc; clear; close all;
 
-    % Configuration
-    folderNameList = {'DataFolder_1920x1080_500_IDEAL_REL_MOTION_TRANS_XYZ_PAN_3D_EIGHT'};
-    transErrList = {[0.0, 0.0, 0.0]};
-    angErrList = [0.0];
+    % % Configuration
+    % folderNameList = {'DataFolder_1920x1080_500_IDEAL_REL_MOTION_TRANS_XYZ_EIGHT'};
+    % transErrList = {[0.0, 0.0, 0.0]};
+    % angErrList = [0.0];
 
     for f = 1:length(folderNameList)
         for t = 1:length(transErrList)
             for a = 1:length(angErrList)
-                run_experiment(folderNameList{f}, angErrList(a), transErrList{t});
+                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES);
             end
         end
     end
 end
 
 
-function run_experiment(expFolderName, angStd, transStd)
-    PLOT_FIGURES = true;
+function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES)
+  
     % Setup Paths
     PARTITION_NAME = 'D:\';
     BASE_DIR_NAME = 'DOKTORA\EXPERIMENTS\Dataset_Text_Python\';
@@ -48,10 +48,10 @@ function run_experiment(expFolderName, angStd, transStd)
     idealPts3d = TrajectoryGenerator.sample_trajectory(moreDense3d, 5);
 
     % Optimization Settings
-    MAX_ITERATIONS = 1;
-    MIN_COST_THRESHOLD = 100.0;
-    REL_COST_DELTA = 1e-3;
-    COST_STABILITY_PATIENCE = 10;
+    MAX_ITERATIONS = 5000;
+    MIN_COST_THRESHOLD = 1e-3;
+    REL_COST_DELTA = 1e-6;
+    COST_STABILITY_PATIENCE = 500;
 
     % Logging setup (Skipped file creation for brevity, printing to console)
     fprintf('Starting Experiment: %s\n', expFolderName);
@@ -65,6 +65,7 @@ function run_experiment(expFolderName, angStd, transStd)
     % --- LOGGING SETUP END ---    
 
     NUM_REPEATS = 1;
+    resNormArr = [];
 
     for r = 1:NUM_REPEATS
         for i = 1:numSamples
@@ -82,7 +83,26 @@ function run_experiment(expFolderName, angStd, transStd)
             % Add Noise for initialization
             [noisyGtTransMat, yawErr, transErr] = UtilityFunctions.addNoiseToPose(gtTransMat, angStd, transStd);
             currentTransMat = noisyGtTransMat;
-            currentTransMat = gtTransMat;
+            %currentTransMat = gtTransMat;
+
+            % % Project
+            % % 1. Transform 3D points
+            % pts3d_h = [idealPts3d; ones(1, size(idealPts3d,2))];
+            % 
+            % T = gtTransMat;
+            % 
+            % p_cam = T * pts3d_h;
+            % p_cam = p_cam(1:3, :) ./ p_cam(4, :);
+            % 
+            % % 2. Project to Pixel
+            % uv_hom = Params.KK * p_cam;
+            % uv = uv_hom(1:2, :) ./ uv_hom(3, :);
+            % 
+            % figure,
+            % plot(point2d(:,1), point2d(:,2), 'ob'), hold on,
+            % plot(uv(1,:), uv(2,:), '*r'),
+            % axis([0, 1920, 0, 1024])
+            % aaaa
 
 
             % Init Loop variables
@@ -92,15 +112,10 @@ function run_experiment(expFolderName, angStd, transStd)
             
             % Initial Guess Vector (Rodrigues 1x3, Trans 1x3)
             initPoseGuess = UtilityFunctions.formInitialPoseGuess(currentTransMat);
-            % currentTransMat
-            initPoseGuess(2) = -initPoseGuess(2);
-
-            % moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, gtTransMat);
-            % UtilityFunctions.residuals(initPoseGuess, moreDense3dInCamFrame, 
             
             % Levenberg-Marquardt Options
             options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', ...
-                                   'Display', 'iter', 'MaxFunctionEvaluations', 10000, ...
+                                   'Display', 'off', 'MaxFunctionEvaluations', 10000, ...
                                    'FunctionTolerance', 1e-12);
             % tic;
             % --- Iterative Refinement ---
@@ -135,7 +150,7 @@ function run_experiment(expFolderName, angStd, transStd)
                 % x_opt
                 % initPoseGuess
                 % resnorm
-                % xxx
+                % disp("--------------------------")
                 
                 current_cost = resnorm; % Squared error sum
 
@@ -165,11 +180,14 @@ function run_experiment(expFolderName, angStd, transStd)
                 iteration = iteration + 1;
             end
             % toc;
+            % if stability_counter == 100
+                fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, current_cost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
 
-            fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d\n', i, iteration, current_cost, stability_counter);
+                resNormArr = [resNormArr current_cost];
 
+            % end
             % --- FINAL VISUALIZATION ---
-            if PLOT_FIGURES && stability_counter == 10
+            if PLOT_FIGURES && current_cost > 100.0%stability_counter == COST_STABILITY_PATIENCE
                 % 1. Transform cloud to FINAL estimated pose
                 moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
 
@@ -273,4 +291,6 @@ function run_experiment(expFolderName, angStd, transStd)
     end
     disp('DONE.');
     fclose(logFid);
+
+    figure(123214), plot(resNormArr)
 end
