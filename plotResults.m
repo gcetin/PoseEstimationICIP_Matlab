@@ -30,7 +30,7 @@ function stats = plotResults(fName, plot_all_angles)
     [total_rows, num_cols] = size(raw_data);
     raw_sampleNo = raw_data(:, 1);
 
-    % --- 3. Averaging Logic ---
+    % --- 3. Median Logic (Replaces Averaging) ---
     block_size = length(raw_sampleNo);
     if ~isempty(declared_samples)
         block_size = declared_samples;
@@ -38,27 +38,26 @@ function stats = plotResults(fName, plot_all_angles)
     
     use_average = ~isempty(declared_samples) && mod(total_rows, block_size) == 0;
     repeats_info = 'unknown';
-
+    % use_average = false
     if use_average
         repeat_cnt = total_rows / block_size;
         
-        % Reshape data to [block_size, repeat_cnt, num_cols] to average across repeats
-        % We transpose raw_data first to handle linear indexing correctly during reshape
-        % Reshape logic: (Cols, BlockSize, Repeats) -> Permute to (BlockSize, Repeats, Cols)
+        % Reshape data to [block_size, repeat_cnt, num_cols]
         temp_data = reshape(raw_data', num_cols, block_size, repeat_cnt);
         perm_data = permute(temp_data, [2, 3, 1]);
         
-        % Mean across the 2nd dimension (repeats)
-        data = squeeze(mean(perm_data, 2));
+        % --- CHANGE: Use Median instead of Mean ---
+        % This filters out outliers across the repeats
+        data = squeeze(median(perm_data, 2));
         
-        % Restore sample numbers (they shouldn't be averaged, but strictly they are identical)
+        % Restore sample numbers (strictly they are identical)
         data(:, 1) = raw_sampleNo(1:block_size);
         
         repeats_info = repeat_cnt;
-        fprintf('Averaged recordings per sample: block_size=%d, repeats=%d\n', block_size, repeat_cnt);
+        fprintf('Median-filtering recordings per sample: block_size=%d, repeats=%d\n', block_size, repeat_cnt);
     else
         data = raw_data;
-        fprintf('Averaging skipped: cannot infer repeat block.\n');
+        fprintf('Median logic skipped: cannot infer repeat block.\n');
     end
 
     % --- 4. Column Extraction ---
@@ -128,6 +127,7 @@ function stats = plotResults(fName, plot_all_angles)
     % Angle Diffs
     phi_err   = angle_diff_deg(estAngPhi, gtAngPhi);
     theta_err = angle_diff_deg(estAngTheta, gtAngTheta);
+    figure, plot(theta_err)
     psi_err   = angle_diff_deg(estAngPsi, gtAngPsi);
 
     % % Angle Diffs
@@ -394,12 +394,14 @@ function plot_trans_errors_sorted(gt, err_est, axis_name)
 end
 
 function s = print_stats_helper(arr, name, use_abs_for_calc, stats_fn)
-    % Calculates stats, prints them formatted, and returns struct
+    % Calculates stats, prints them formatted (Median focused), and returns struct
     val_for_calc = arr;
     if use_abs_for_calc
         val_for_calc = abs(arr);
     end
     s = stats_fn(val_for_calc, false);
-    fprintf('%s: min=%.4f, max=%.4f, mean=%.4f, median=%.4f\n', ...
-        name, s.min, s.max, s.mean, s.median);
+    
+    % --- CHANGE: Print Median first/prominently rather than Mean ---
+    fprintf('%s: median=%.4f (mean=%.4f), min=%.4f, max=%.4f\n', ...
+        name, s.median, s.mean, s.min, s.max);
 end

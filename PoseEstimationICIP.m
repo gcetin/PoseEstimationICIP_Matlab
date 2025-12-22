@@ -1,4 +1,4 @@
-function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES)
+function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES, NUM_REPEATS)
     % Main entry point for Pose Estimation
     % clc; clear; close all;
 
@@ -10,14 +10,14 @@ function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrLi
     for f = 1:length(folderNameList)
         for t = 1:length(transErrList)
             for a = 1:length(angErrList)
-                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES);
+                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES, NUM_REPEATS);
             end
         end
     end
 end
 
 
-function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES)
+function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES, NUM_REPEATS)
   
     % Setup Paths
     PARTITION_NAME = 'D:\';
@@ -64,7 +64,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     logFid = UtilityFunctions.createLogDataFiles(logFileName);
     % --- LOGGING SETUP END ---    
 
-    NUM_REPEATS = 1;
+    % NUM_REPEATS = 1;
     resNormArr = [];
 
     for r = 1:NUM_REPEATS

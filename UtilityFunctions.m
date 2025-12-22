@@ -1,31 +1,109 @@
 classdef UtilityFunctions
     methods (Static)
 
-        function [numSamples, relPoseType, appendFlag, noiseFlag, shapeType] = parse_folder_name(folderName)
-            % Simple parsing logic mimicking regex
-            % Assuming folder format matches strict expectations
-
-            numSamples = 500; % Default fallback or parse '500' from string
-            if contains(folderName, 'NOISY')
+        function [num_data, rel_pose_type, appendFlag, noiseFlag, shape_type] = parse_folder_name(folder_name)
+            % PARSE_FOLDER_NAME Parses directory string using specific project Enums
+            
+            fprintf('Processing: %s\n', folder_name);
+            fprintf('%s\n', repmat('-', 1, 40));
+        
+            % --- 1. Define Enum Maps ---
+            
+            % Map 1: DataGenShapeType (Suffix -> Integer Value)
+            % Python: EIGHT=0, QUATREFOIL=1, CIRCLE=2, HEART=3
+            keys_shapes = {'_EIGHT', '_QUATREFOIL', '_CIRCLE', '_HEART'};
+            vals_shapes = {0, 1, 2, 3}; 
+            ShapeSuffixDict = containers.Map(keys_shapes, vals_shapes);
+        
+            % Map 2: DataGenOutType (Suffix -> Integer Value)
+            % We construct the keys by prepending "_" to the Enum name
+            keys_poses = { ...
+                '_TRANS_X', '_TRANS_Y', '_TRANS_Z', '_TRANS_XYZ', ...
+                '_ROLL_3D', '_PAN_3D', '_TILT_3D', ...
+                '_PAN_TILT_3D', '_PAN_ROLL_3D', '_TILT_ROLL_3D', '_PAN_TILT_ROLL_3D', ...
+                '_TRANS_Z_ROLL_3D', '_TRANS_Z_PAN_3D', '_TRANS_Z_TILT_3D', ...
+                '_TRANS_Z_PAN_TILT_ROLL_3D', '_TRANS_XYZ_PAN_3D', ...
+                '_TRANS_XYZ_ROLL_PAN_TILT_3D'};
+            
+            vals_poses = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
+            SUFFIX_TO_REL_POSE_TYPE = containers.Map(keys_poses, vals_poses);
+        
+            % --- 2. Regex Parsing (Head) ---
+            % Pattern captures: (1)Width, (2)Height, (3)NumData, (4)NoiseSuffix, (5)RawTail
+            pattern = '^DataFolder_(\d+)x(\d+)_(\d+)(.*?)_REL_MOTION(.*)$';
+            tokens = regexp(folder_name, pattern, 'tokens', 'once');
+            
+            if isempty(tokens)
+                fprintf('Error: Pattern did not match.\n');
+                [num_data, rel_pose_type, appendFlag, noiseFlag, shape_type] = deal([]); 
+                return;
+            end
+            
+            % Extract standard parts
+            % width = str2double(tokens{1});   % Unused in output, but parsed
+            % height = str2double(tokens{2});  % Unused in output, but parsed
+            num_data = str2double(tokens{3});
+            noise_suffix = tokens{4};
+            raw_tail = tokens{5};
+            
+            % Determine noiseFlag
+            noiseFlag = false;
+            if contains(noise_suffix, 'NOISY')
                 noiseFlag = true;
-            else
+            elseif contains(noise_suffix, 'IDEAL')
                 noiseFlag = false;
             end
-
-            if contains(folderName, 'APP')
+            
+            % --- 3. Parse the Tail (Motion/Shape) ---
+            current_tail = raw_tail;
+            
+            % A. Detect Shape (Peel off from end)
+            shape_suffix = '';
+            shape_type = []; % Default if not found
+            
+            % Iterate over keys to find a match at the end of the string
+            all_shapes = keys(ShapeSuffixDict);
+            for i = 1:length(all_shapes)
+                suffix = all_shapes{i};
+                if endsWith(current_tail, suffix)
+                    shape_suffix = suffix;
+                    shape_type = ShapeSuffixDict(suffix);
+                    % Remove suffix from tail
+                    current_tail = current_tail(1 : end-length(suffix)); 
+                    break;
+                end
+            end
+            
+            % B. Detect Append Flag
+            append_suffix = '';
+            appendFlag = false;
+            
+            if endsWith(current_tail, '_APP')
+                append_suffix = '_APP';
+                current_tail = current_tail(1 : end-4);
+            elseif endsWith(current_tail, '_True')
+                append_suffix = '_True';
+                current_tail = current_tail(1 : end-5);
+            end
+            
+            if contains(append_suffix, 'APP')
                 appendFlag = true;
-            else
-                appendFlag = false;
             end
-
-            % Shape
-            if contains(folderName, 'EIGHT')
-                shapeType = 0;
+            
+            % C. The Remainder is the Relative Pose Suffix
+            rel_pose_suffix = current_tail;
+            
+            % D. Lookup the Enum Type
+            if isKey(SUFFIX_TO_REL_POSE_TYPE, rel_pose_suffix)
+                rel_pose_type = SUFFIX_TO_REL_POSE_TYPE(rel_pose_suffix);
+                % fprintf('Found Pose Type: %d (Suffix: %s)\n', rel_pose_type, rel_pose_suffix);
             else
-                shapeType = 2; % Default
+                rel_pose_type = [];
+                fprintf('Warning: Unknown Pose Suffix: %s\n', rel_pose_suffix);
             end
-
-            relPoseType = 0; % Placeholder
+        
+            % --- 4. Return Data ---
+            % Returned via function output arguments
         end
 
         function [gtDataDict, trajData] = load_data_struct(expDirName)
