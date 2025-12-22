@@ -137,25 +137,25 @@ function stats = plotResults(fName, plot_all_angles)
     
     % --- 6. Plotting ---
 
-    % FIGURE 1: Translation Errors
-    fig1 = figure('Name', 'Translation Errors', 'NumberTitle', 'off');
-    set(gcf, 'Position', [100, 100, 1000, 800]);
-    
-    ax1 = subplot(3,1,1); plot_trans_subplot(sampleNo, err_est_x, loss_condition, 'X-axis: translation differences');
-    ax2 = subplot(3,1,2); plot_trans_subplot(sampleNo, err_est_y, loss_condition, 'Y-axis: translation differences');
-    ax3 = subplot(3,1,3); plot_trans_subplot(sampleNo, err_est_z, loss_condition, 'Z-axis: translation differences');
-    xlabel('sample');
-    linkaxes([ax1, ax2, ax3], 'x');
-
-    % FIGURE 2: Percentage Translation Errors
-    fig2 = figure('Name', 'Percent Translation Errors', 'NumberTitle', 'off');
-    set(gcf, 'Position', [150, 150, 1000, 800]);
-    
-    ax1 = subplot(3,1,1); plot_percent_subplot(sampleNo, pe_est_x, pe_noisy_x, 'X-axis: % translation error');
-    ax2 = subplot(3,1,2); plot_percent_subplot(sampleNo, pe_est_y, pe_noisy_y, 'Y-axis: % translation error');
-    ax3 = subplot(3,1,3); plot_percent_subplot(sampleNo, pe_est_z, pe_noisy_z, 'Z-axis: % translation error');
-    xlabel('sample');
-    linkaxes([ax1, ax2, ax3], 'x');
+    % % FIGURE 1: Translation Errors
+    % fig1 = figure('Name', 'Translation Errors', 'NumberTitle', 'off');
+    % set(gcf, 'Position', [100, 100, 1000, 800]);
+    % 
+    % ax1 = subplot(3,1,1); plot_trans_subplot(sampleNo, err_est_x, loss_condition, 'X-axis: translation differences');
+    % ax2 = subplot(3,1,2); plot_trans_subplot(sampleNo, err_est_y, loss_condition, 'Y-axis: translation differences');
+    % ax3 = subplot(3,1,3); plot_trans_subplot(sampleNo, err_est_z, loss_condition, 'Z-axis: translation differences');
+    % xlabel('sample');
+    % linkaxes([ax1, ax2, ax3], 'x');
+    % 
+    % % FIGURE 2: Percentage Translation Errors
+    % fig2 = figure('Name', 'Percent Translation Errors', 'NumberTitle', 'off');
+    % set(gcf, 'Position', [150, 150, 1000, 800]);
+    % 
+    % ax1 = subplot(3,1,1); plot_percent_subplot(sampleNo, pe_est_x, pe_noisy_x, 'X-axis: % translation error');
+    % ax2 = subplot(3,1,2); plot_percent_subplot(sampleNo, pe_est_y, pe_noisy_y, 'Y-axis: % translation error');
+    % ax3 = subplot(3,1,3); plot_percent_subplot(sampleNo, pe_est_z, pe_noisy_z, 'Z-axis: % translation error');
+    % xlabel('sample');
+    % linkaxes([ax1, ax2, ax3], 'x');
 
     % Setup Angle Data
     if plot_all_angles
