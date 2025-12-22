@@ -5,7 +5,10 @@ classdef UtilityFunctions
             % Simple parsing logic mimicking regex
             % Assuming folder format matches strict expectations
 
-            numSamples = 500; % Default fallback or parse '500' from string
+
+
+            numSamples = 250; % Default fallback or parse '500' from string
+            
             if contains(folderName, 'NOISY')
                 noiseFlag = true;
             else
@@ -40,7 +43,8 @@ classdef UtilityFunctions
             if ang_std ~= 0
                 yaw_noise = randn() * ang_std;
                 % ZYX rotation matrix for just Z noise
-                eul = [deg2rad(yaw_noise), 0, 0];
+                %eul = [deg2rad(yaw_noise), 0, 0];
+                eul = [0, deg2rad(yaw_noise), 0];
                 R_noise = eul2rotm(eul, 'ZYX');
                 R_noisy = R_noise * R_gt;                
             else
@@ -55,8 +59,9 @@ classdef UtilityFunctions
             end
 
             t_noisy = t_gt + t_noise;
-            % Clamp Z
-            t_noisy(3) = max(t_noisy(3), 15.0);
+            % Clamp Z -  in order to ensure visibility, translation values
+            % closer than 15 meters are avoided
+            t_noisy(3) = max(t_noisy(3), 15.0); 
 
             T_noisy = eye(4);
             T_noisy(1:3, 1:3) = R_noisy;
@@ -240,57 +245,131 @@ classdef UtilityFunctions
                 error('Could not open log file: %s', fullPath);
             end
 
-            % Columns matching Python code exactly
-            cols = {...
-                'sample_number', 'validty', ...
-                'ideal_roll(deg)', 'ideal_pitch(deg)', 'ideal_yaw(deg)', ...
-                'ideal_distance_x(m)', 'ideal_distance_y(m)', 'ideal_distance_z(m)', ...
-                'noisy_roll(deg)', 'noisy_pitch(deg)', 'noisy_yaw(deg)', ...
-                'noisy_distance_x(m)', 'noisy_distance_y(m)', 'noisy_distance_z(m)', ...
-                'estimated_roll(deg)', 'estimated_pitch(deg)', 'estimated_yaw(deg)', ...
-                'estimated_distance_x(m)', 'estimated_distance_y(m)', 'estimated_distance_z(m)', ...
-                'lm_cost', 'lm_optimality', 'lm_numFuncEval', 'lm_iteration', ...
-                'lm_status', 'lm_success', ...
-                'errAng1', 'errAng2', 'errAng3', ...
-                'rot_errvec_x(deg)', 'rot_errvec_y(deg)', 'rot_errvec_z(deg)', ...
-                'rot_err_angle_mag(deg)', 'duration', 'loss_condition', 'ctr_condition'};
+            % % Columns matching Python code exactly
+            % cols = {...
+            %     'sample_number', 'validty', ...
+            %     'ideal_roll(deg)', 'ideal_pitch(deg)', 'ideal_yaw(deg)', ...
+            %     'ideal_distance_x(m)', 'ideal_distance_y(m)', 'ideal_distance_z(m)', ...
+            %     'noisy_roll(deg)', 'noisy_pitch(deg)', 'noisy_yaw(deg)', ...
+            %     'noisy_distance_x(m)', 'noisy_distance_y(m)', 'noisy_distance_z(m)', ...
+            %     'estimated_roll(deg)', 'estimated_pitch(deg)', 'estimated_yaw(deg)', ...
+            %     'estimated_distance_x(m)', 'estimated_distance_y(m)', 'estimated_distance_z(m)', ...
+            %     'lm_cost', 'lm_optimality', 'lm_numFuncEval', 'lm_iteration', ...
+            %     'lm_status', 'lm_success', ...
+            %     'errAng1', 'errAng2', 'errAng3', ...
+            %     'rot_errvec_x(deg)', 'rot_errvec_y(deg)', 'rot_errvec_z(deg)', ...
+            %     'rot_err_angle_mag(deg)', 'duration', 'loss_condition', 'ctr_condition'};
+            % 
+            % fprintf(fid, '%s\n', strjoin(cols, '\t'));
 
-            fprintf(fid, '%s\n', strjoin(cols, '\t'));
+            
+            % Define the header string matching the logData columns
+            headerFmt = ['Sample\tValidity\t', ...
+                         'GT_Roll\tGT_Pitch\tGT_Yaw\tGT_x\tGT_y\tGT_z\t', ...
+                         'Noisy_Roll\tNoisy_Pitch\tNoisy_Yaw\tNoisy_x\tNoisy_y\tNoisy_z\t', ...
+                         'Est_Roll\tEst_Pitch\tEst_Yaw\tEst_x\tEst_y\tEst_z\t', ...
+                         'Cost\tOptimality\tFuncCount\tIterations\tStatus\tSuccess\t', ...
+                         'Err_Roll\tErr_Pitch\tErr_Yaw\t', ...
+                         'RotVec_x\tRotVec_y\tRotVec_z\tRotErrMag\t', ...
+                         'Duration\tLossCond\tCtrCond\t', ...
+                         'NoiseAngMag\tNoiseTransMag\n']; % <--- Added these two
+            
+            fprintf(fid, headerFmt);            
         end
+
+        % function logData(fid, numSample, validity, lmRes, T_gt, T_noisy, R_est, t_est, duration, lossCond, ctrCond)
+            % % Extract GT and Noisy components
+            % R_gt = T_gt(1:3, 1:3);
+            % t_gt = T_gt(1:3, 4);
+            % 
+            % R_noisy = T_noisy(1:3, 1:3);
+            % t_noisy = T_noisy(1:3, 4);
+            % 
+            % % Calculate Euler Angles (ZYX convention, degrees)
+            % % MATLAB's rotm2eul returns [Yaw, Pitch, Roll] in radians.
+            % % We convert to degrees and reorder to [Roll, Pitch, Yaw] to match Python navpy.
+            % function rpy = getRPY(R)
+            %     eul = rotm2eul(R, 'ZYX'); % Returns [z, y, x] (rad)
+            %     rpy_deg = rad2deg(eul);
+            %     rpy = [rpy_deg(3), rpy_deg(2), rpy_deg(1)]; % [x, y, z]
+            % end
+            % 
+            % gtAng = getRPY(R_gt);
+            % nsAng = getRPY(R_noisy);
+            % estAng = getRPY(R_est);
+            % 
+            % % Calculate Angular Errors (Wrapped to -180..180)
+            % diff = gtAng - estAng;
+            % errAng = mod(diff + 180, 360) - 180;
+            % 
+            % % Calculate Rotation Error Vector (Axis-Angle)
+            % R_rel = R_est' * R_gt;
+            % rot_vec_rad = UtilityFunctions.rodrigues_inv(R_rel);
+            % rot_vec_deg = rad2deg(rot_vec_rad);
+            % rot_err_mag = rad2deg(norm(rot_vec_rad));
+            % 
+            % % Formatted Output String
+            % % Note: 'lmRes' is a struct with cost, optimality, funcCount, iterations
+            % fmt = ['%d\t%d\t', ...                                   % sample, validity
+            %     '%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t', ...       % GT (ang/trans)
+            %     '%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t', ...       % Noisy
+            %     '%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t', ...       % Estimated
+            %     '%.4f\t%.4f\t%d\t%d\t%d\t%d\t', ...               % LM stats
+            %     '%.4f\t%.4f\t%.4f\t', ...                         % ErrAngles
+            %     '%.4f\t%.4f\t%.4f\t%.4f\t', ...                   % RotErrVec
+            %     '%.4f\t%d\t%d\n'];                                % Duration, Conds
+            % 
+            % fprintf(fid, fmt, ...
+            %     numSample, validity, ...
+            %     gtAng, t_gt', ...
+            %     nsAng, t_noisy', ...
+            %     estAng, t_est', ...
+            %     lmRes.cost, lmRes.optimality, lmRes.funcCount, lmRes.iterations, 1, 1, ... % Hardcoded status/success=1 for simplicity
+            %     errAng, ...
+            %     rot_vec_deg', rot_err_mag, ...
+            %     0.0, lossCond, ctrCond);
+        % end
+
 
         function logData(fid, numSample, validity, lmRes, T_gt, T_noisy, R_est, t_est, duration, lossCond, ctrCond)
             % Extract GT and Noisy components
             R_gt = T_gt(1:3, 1:3);
             t_gt = T_gt(1:3, 4);
-
             R_noisy = T_noisy(1:3, 1:3);
             t_noisy = T_noisy(1:3, 4);
-
+        
             % Calculate Euler Angles (ZYX convention, degrees)
-            % MATLAB's rotm2eul returns [Yaw, Pitch, Roll] in radians.
-            % We convert to degrees and reorder to [Roll, Pitch, Yaw] to match Python navpy.
             function rpy = getRPY(R)
                 eul = rotm2eul(R, 'ZYX'); % Returns [z, y, x] (rad)
                 rpy_deg = rad2deg(eul);
                 rpy = [rpy_deg(3), rpy_deg(2), rpy_deg(1)]; % [x, y, z]
             end
-
+        
             gtAng = getRPY(R_gt);
             nsAng = getRPY(R_noisy);
             estAng = getRPY(R_est);
-
+        
             % Calculate Angular Errors (Wrapped to -180..180)
             diff = gtAng - estAng;
             errAng = mod(diff + 180, 360) - 180;
-
+        
             % Calculate Rotation Error Vector (Axis-Angle)
             R_rel = R_est' * R_gt;
             rot_vec_rad = UtilityFunctions.rodrigues_inv(R_rel);
             rot_vec_deg = rad2deg(rot_vec_rad);
             rot_err_mag = rad2deg(norm(rot_vec_rad));
-
+        
+            % --- NEW: Calculate Input Noise Amounts ---
+            % 1. Angular Noise Amount (Magnitude of rotation difference)
+            R_noise_rel = R_noisy' * R_gt;
+            noise_rot_vec_rad = UtilityFunctions.rodrigues_inv(R_noise_rel);
+            noise_ang_mag = rad2deg(norm(noise_rot_vec_rad));
+        
+            % 2. Translational Noise Amount (Euclidean distance)
+            noise_trans_mag = norm(t_noisy - t_gt);
+        
             % Formatted Output String
-            % Note: 'lmRes' is a struct with cost, optimality, funcCount, iterations
+            % Added two columns at the end for Noise Amount (Ang, Trans)
             fmt = ['%d\t%d\t', ...                                   % sample, validity
                 '%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t', ...       % GT (ang/trans)
                 '%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t', ...       % Noisy
@@ -298,20 +377,22 @@ classdef UtilityFunctions
                 '%.4f\t%.4f\t%d\t%d\t%d\t%d\t', ...               % LM stats
                 '%.4f\t%.4f\t%.4f\t', ...                         % ErrAngles
                 '%.4f\t%.4f\t%.4f\t%.4f\t', ...                   % RotErrVec
-                '%.4f\t%d\t%d\n'];                                % Duration, Conds
-
+                '%.4f\t%d\t%d\t', ...                             % Duration, Conds
+                '%.4f\t%.4f\n'];                                  % <--- NEW: Noise Mag (Ang, Trans)
+        
             fprintf(fid, fmt, ...
                 numSample, validity, ...
                 gtAng, t_gt', ...
                 nsAng, t_noisy', ...
                 estAng, t_est', ...
-                lmRes.cost, lmRes.optimality, lmRes.funcCount, lmRes.iterations, 1, 1, ... % Hardcoded status/success=1 for simplicity
+                lmRes.cost, lmRes.optimality, lmRes.funcCount, lmRes.iterations, 1, 1, ...
                 errAng, ...
                 rot_vec_deg', rot_err_mag, ...
-                0.0, lossCond, ctrCond);
+                0.0, lossCond, ctrCond, ...
+                noise_ang_mag, noise_trans_mag); % <--- Added new variables
         end
-
-
+            
+        
         function [subset_cloud, indices] = filter_closest_points(ray_origin, ray_dir, cloud, N)
             % Helper: Selects N points closest to the ray for cleaner plotting
             % ray_origin: 1x3
@@ -350,7 +431,7 @@ classdef UtilityFunctions
             subset_cloud = cloud(:, indices);
         end
 
-        function visualize_entire_scene(rayOrigins, rayDirections, denseCloud, match_indices, T_gt, T_est)
+        function visualize_entire_scene(rayOrigins, rayDirections, denseCloud, match_indices, T_gt, T_est, moreDense3dInCamFrameOrg)
             % visualize_entire_scene - Plots rays, cloud, highlights matches, and overlay text.
             %
             % Args:
@@ -366,6 +447,10 @@ classdef UtilityFunctions
             % 1. Plot Cloud
             scatter3(denseCloud(1,:), denseCloud(2,:), denseCloud(3,:), ...
                 10, [0.8, 0.8, 0.8], 'filled', 'DisplayName', 'Dense Cloud');
+
+            scatter3(moreDense3dInCamFrameOrg(1,:), moreDense3dInCamFrameOrg(2,:), moreDense3dInCamFrameOrg(3,:), ...
+                10, [0.8, 0.8, 0.8], 'filled', 'DisplayName', 'Dense Cloud');
+
 
             % 2. Plot Camera Path
             plot3(rayOrigins(:,1), rayOrigins(:,2), rayOrigins(:,3), ...

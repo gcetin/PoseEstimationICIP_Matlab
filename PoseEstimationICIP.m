@@ -1,4 +1,4 @@
-function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES)
+function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES, NUM_REPEATS)
     % Main entry point for Pose Estimation
     % clc; clear; close all;
 
@@ -10,14 +10,14 @@ function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrLi
     for f = 1:length(folderNameList)
         for t = 1:length(transErrList)
             for a = 1:length(angErrList)
-                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES);
+                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES, NUM_REPEATS);
             end
         end
     end
 end
 
 
-function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES)
+function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES, NUM_REPEATS)
   
     % Setup Paths
     PARTITION_NAME = 'D:\';
@@ -64,7 +64,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     logFid = UtilityFunctions.createLogDataFiles(logFileName);
     % --- LOGGING SETUP END ---    
 
-    NUM_REPEATS = 1;
+    %NUM_REPEATS = 1;
     resNormArr = [];
 
     for r = 1:NUM_REPEATS
@@ -117,7 +117,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
             options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', ...
                                    'Display', 'off', 'MaxFunctionEvaluations', 10000, ...
                                    'FunctionTolerance', 1e-12);
-            % tic;
+            tic;
             % --- Iterative Refinement ---
             iteration = 0;
             while (iteration < MAX_ITERATIONS) && (current_cost > MIN_COST_THRESHOLD) && (stability_counter < COST_STABILITY_PATIENCE)
@@ -179,17 +179,75 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
                 prev_cost = current_cost;
                 iteration = iteration + 1;
             end
-            % toc;
-            % if stability_counter == 100
-                fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, current_cost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
+            duration = toc;
 
+            if rem(i,2) == 0
+                fprintf('?\n')
+            else
+                fprintf('!\n')
+            end
+            % if stability_counter == 100
+                % fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, current_cost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
+                if stability_counter == 500 
+                    fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, current_cost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
+                    
+                    % 2. Extract Rotation Matrix (3x3) and Translation Vector (3x1)
+                    R_gt = gtTransMat(1:3, 1:3);
+                    t_gt = gtTransMat(1:3, 4);
+
+                    R_noisy = noisyGtTransMat(1:3, 1:3);
+                    t_noisy = noisyGtTransMat(1:3, 4);
+
+                    R_est = currentTransMat(1:3, 1:3);
+                    t_est = currentTransMat(1:3, 4);                    
+
+                    % 3. Convert Rotation to Euler Angles
+                    % Using 'ZYX' convention (Yaw, Pitch, Roll) to match your previous code
+                    eulRad = rotm2eul(R_gt, 'ZYX'); % Returns [Yaw, Pitch, Roll] in radians
+                    eulDeg = rad2deg(eulRad);       % Convert to degrees
+
+                    eulRadN = rotm2eul(R_noisy, 'ZYX'); % Returns [Yaw, Pitch, Roll] in radians
+                    eulDegN = rad2deg(eulRadN);       % Convert to degrees
+
+                    eulRadEst = rotm2eul(R_est, 'ZYX'); % Returns [Yaw, Pitch, Roll] in radians
+                    eulDegEst = rad2deg(eulRadEst);       % Convert to degrees                    
+
+                    % Map to specific names for clarity
+                    yaw_deg   = eulDeg(1); % Z-axis
+                    pitch_deg = eulDeg(2); % Y-axis
+                    roll_deg  = eulDeg(3); % X-axis
+
+                    yawN_deg   = eulDegN(1); % Z-axis
+                    pitchN_deg = eulDegN(2); % Y-axis
+                    rollN_deg  = eulDegN(3); % X-axis
+
+                    yawEst_deg   = eulDegEst(1); % Z-axis
+                    pitchEst_deg = eulDegEst(2); % Y-axis
+                    rollEst_deg  = eulDegEst(3); % X-axis                    
+                    
+                    % 4. Display Results
+                    fprintf('--- Translation (gt - noisy - estimated - abs(error)) ---\n');
+                    fprintf('X: (%.4f) - (%.4f) - (%.4f) - (%.4f)\n', t_gt(1), t_noisy(1), t_est(1), abs(t_gt(1)-t_est(1)));
+                    fprintf('Y: (%.4f) - (%.4f) - (%.4f) - (%.4f)\n', t_gt(2), t_noisy(2), t_est(2), abs(t_gt(2)-t_est(2)));
+                    fprintf('Z: (%.4f) - (%.4f) - (%.4f) - (%.4f)\n', t_gt(3), t_noisy(3), t_est(3), abs(t_gt(3)-t_est(3)));
+                    
+                    fprintf('\n--- Rotation (Degrees)  (gt - noisy - estimated)  ---\n');
+                    % fprintf('Roll  (X): (%.4f) - (%.4f) - (%.4f)\n', roll_deg, rollN_deg, rollEst_deg);
+                    fprintf('Yaw (Y): (%.4f) - (%.4f) - (%.4f) - (%.4f)\n', pitch_deg, pitchN_deg, pitchEst_deg, abs(pitch_deg - pitchEst_deg));
+                    % fprintf('Pitch   (Z): (%.4f) - (%.4f) - (%.4f)\n', yaw_deg, yawN_deg, yawEst_deg);    
+
+                    fprintf('---------------------------------------------------------------------------\n');
+                end
                 resNormArr = [resNormArr current_cost];
+
+
 
             % end
             % --- FINAL VISUALIZATION ---
             if PLOT_FIGURES && current_cost > 100.0%stability_counter == COST_STABILITY_PATIENCE
                 % 1. Transform cloud to FINAL estimated pose
                 moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
+                moreDense3dInCamFrameOrg = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, gtTransMat);
 
                 % 2. Re-calculate all matches for the final pose
                 % (We need the indices to draw lines to the correct points)
@@ -206,7 +264,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
 
                 % 3. Visualize Everything At Once
                 fprintf('Plotting full scene for Sample %d...\n', i);
-                UtilityFunctions.visualize_entire_scene(rayOrigins, rayDirections, moreDense3dInCamFrame, all_best_indices, gtTransMat, currentTransMat);
+                UtilityFunctions.visualize_entire_scene(rayOrigins, rayDirections, moreDense3dInCamFrame, all_best_indices, gtTransMat, currentTransMat, moreDense3dInCamFrameOrg);
                 % Optional: Pause so you can inspect it before the next sample starts
                 pause;
             end
