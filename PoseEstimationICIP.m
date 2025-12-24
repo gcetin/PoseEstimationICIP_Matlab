@@ -67,9 +67,14 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     % NUM_REPEATS = 1;
     resNormArr = [];
 
+
+    % Levenberg-Marquardt Options
+    options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', ...
+                       'Display', 'off', 'MaxFunctionEvaluations', 10000, ...
+                       'FunctionTolerance', 1e-12);
+
     for r = 1:NUM_REPEATS
         for i = 1:numSamples
-
             % Get observed 2D points (N x 2)
             point2d = squeeze(trajData(i, :, :));
             numPoints = size(point2d, 1);
@@ -79,121 +84,140 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
 
             % Ground Truth Matrix
             gtTransMat = UtilityFunctions.getGtTransMat(gtDataDict, i);
-            
-            % Add Noise for initialization
-            [noisyGtTransMat, yawErr, transErr] = UtilityFunctions.addNoiseToPose(gtTransMat, angStd, transStd);
-            currentTransMat = noisyGtTransMat;
-            %currentTransMat = gtTransMat;
 
-            % % Project
-            % % 1. Transform 3D points
-            % pts3d_h = [idealPts3d; ones(1, size(idealPts3d,2))];
-            % 
-            % T = gtTransMat;
-            % 
-            % p_cam = T * pts3d_h;
-            % p_cam = p_cam(1:3, :) ./ p_cam(4, :);
-            % 
-            % % 2. Project to Pixel
-            % uv_hom = Params.KK * p_cam;
-            % uv = uv_hom(1:2, :) ./ uv_hom(3, :);
-            % 
-            % figure,
-            % plot(point2d(:,1), point2d(:,2), 'ob'), hold on,
-            % plot(uv(1,:), uv(2,:), '*r'),
-            % axis([0, 1920, 0, 1024])
-            % aaaa
-
-
-            % Init Loop variables
-            current_cost = inf;
-            prev_cost = inf;
-            stability_counter = 0;
-            
-            % Initial Guess Vector (Rodrigues 1x3, Trans 1x3)
-            initPoseGuess = UtilityFunctions.formInitialPoseGuess(currentTransMat);
-            
-            % Levenberg-Marquardt Options
-            options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', ...
-                                   'Display', 'off', 'MaxFunctionEvaluations', 10000, ...
-                                   'FunctionTolerance', 1e-12);
+            bestCost = Inf;
+            bestCostList = [];
+            badCostList = [];
             tic;
-            % --- Iterative Refinement ---
-            iteration = 0;
-            while (iteration < MAX_ITERATIONS) && (current_cost > MIN_COST_THRESHOLD) && (stability_counter < COST_STABILITY_PATIENCE)
+
+            for trialIdx=1:100 
+            
+                % Add Noise for initialization
+                [noisyGtTransMat, yawErr, transErr] = UtilityFunctions.addNoiseToPose(gtTransMat, angStd, transStd);
+                currentTransMat = noisyGtTransMat;
+                %currentTransMat = gtTransMat;
+    
+                % % Project
+                % % 1. Transform 3D points
+                % pts3d_h = [idealPts3d; ones(1, size(idealPts3d,2))];
+                % 
+                % T = gtTransMat;
+                % 
+                % p_cam = T * pts3d_h;
+                % p_cam = p_cam(1:3, :) ./ p_cam(4, :);
+                % 
+                % % 2. Project to Pixel
+                % uv_hom = Params.KK * p_cam;
+                % uv = uv_hom(1:2, :) ./ uv_hom(3, :);
+                % 
+                % figure,
+                % plot(point2d(:,1), point2d(:,2), 'ob'), hold on,
+                % plot(uv(1,:), uv(2,:), '*r'),
+                % axis([0, 1920, 0, 1024])
+                % aaaa
+    
+    
+                % Init Loop variables
+                current_cost = inf;
+                prev_cost = inf;
+                stability_counter = 0;
                 
-                % 1. Convert Dense Cloud to Camera Frame using CURRENT Pose
-                % (3 x N)
-                moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
-                           
-                % 2. Correspondence Establishment
-                % For every ray, find the closest point in the dense cloud
-                closestPointToTheRayCoord = zeros(3, numPoints);
-                
-                % Vectorized Ray-Cloud Intersection
-                for j = 1:numPoints
-                    [~, best_idx] = UtilityFunctions.project_cloud_onto_ray_fast(rayOrigins(j,:), rayDirections(j,:), moreDense3dInCamFrame');
+                % Initial Guess Vector (Rodrigues 1x3, Trans 1x3)
+                initPoseGuess = UtilityFunctions.formInitialPoseGuess(currentTransMat);               
+            
+                % --- Iterative Refinement ---
+                iteration = 0;
+                while (iteration < MAX_ITERATIONS) && (current_cost > MIN_COST_THRESHOLD) && (stability_counter < COST_STABILITY_PATIENCE)
                     
-                    closestPtCam = moreDense3dInCamFrame(:, best_idx);
+                    % 1. Convert Dense Cloud to Camera Frame using CURRENT Pose
+                    % (3 x N)
+                    moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
+                               
+                    % 2. Correspondence Establishment
+                    % For every ray, find the closest point in the dense cloud
+                    closestPointToTheRayCoord = zeros(3, numPoints);
                     
-                    % Transform back to Object Frame
-                    closestPointToTheRayCoord(:, j) = UtilityFunctions.transform_cam_point_to_object(currentTransMat, closestPtCam);
-                end
-
-                % 3. Optimize Pose
-                % We optimize the delta or the absolute? Python code optimizes 'initPoseGuess' 
-                % against the NEW correspondences.
-                
-                fun = @(x) UtilityFunctions.residuals(x, closestPointToTheRayCoord, point2d, Params.KK, Params.distCoeffs);
-                
-                [x_opt, resnorm, ~, exitflag] = lsqnonlin(fun, initPoseGuess, [], [], options);
-                % x_opt
-                % initPoseGuess
-                % resnorm
-                % disp("--------------------------")
-                
-                current_cost = resnorm; % Squared error sum
-
-                % Update Pose (Python code extracts result.x)
-                optRotVec = x_opt(1:3);
-                optTransVec = x_opt(4:6);
-                
-                % Update Matrix (Optimization returns absolute pose for the correspondences)
-                R_opt = UtilityFunctions.rodrigues(optRotVec);
-                currentTransMat = eye(4);
-                currentTransMat(1:3, 1:3) = R_opt;
-                currentTransMat(1:3, 4) = optTransVec';
-                
-                % Update Guess for next iteration
-                initPoseGuess = x_opt;
-
-                % Convergence Check
-                if isfinite(prev_cost)
-                    rel_imp = abs(prev_cost - current_cost) / max(abs(prev_cost), 1e-12);
-                    if rel_imp < REL_COST_DELTA
-                        stability_counter = stability_counter + 1;
-                    else
-                        stability_counter = 0;
+                    % Vectorized Ray-Cloud Intersection
+                    for j = 1:numPoints
+                        [~, best_idx] = UtilityFunctions.project_cloud_onto_ray_fast(rayOrigins(j,:), rayDirections(j,:), moreDense3dInCamFrame');
+                        
+                        closestPtCam = moreDense3dInCamFrame(:, best_idx);
+                        
+                        % Transform back to Object Frame
+                        closestPointToTheRayCoord(:, j) = UtilityFunctions.transform_cam_point_to_object(currentTransMat, closestPtCam);
                     end
+    
+                    % 3. Optimize Pose
+                    % We optimize the delta or the absolute? Python code optimizes 'initPoseGuess' 
+                    % against the NEW correspondences.
+                    
+                    fun = @(x) UtilityFunctions.residuals(x, closestPointToTheRayCoord, point2d, Params.KK, Params.distCoeffs);
+                    
+                    [x_opt, resnorm, ~, exitflag] = lsqnonlin(fun, initPoseGuess, [], [], options);
+                    % x_opt
+                    % initPoseGuess
+                    % resnorm
+                    % disp("--------------------------")
+                    
+                    current_cost = resnorm; % Squared error sum
+    
+                    % Update Pose (Python code extracts result.x)
+                    optRotVec = x_opt(1:3);
+                    optTransVec = x_opt(4:6);
+                    
+                    % Update Matrix (Optimization returns absolute pose for the correspondences)
+                    R_opt = UtilityFunctions.rodrigues(optRotVec);
+                    currentTransMat = eye(4);
+                    currentTransMat(1:3, 1:3) = R_opt;
+                    currentTransMat(1:3, 4) = optTransVec';
+                    
+                    % Update Guess for next iteration
+                    initPoseGuess = x_opt;
+    
+                    % Convergence Check
+                    if isfinite(prev_cost)
+                        rel_imp = abs(prev_cost - current_cost) / max(abs(prev_cost), 1e-12);
+                        if rel_imp < REL_COST_DELTA
+                            stability_counter = stability_counter + 1;
+                        else
+                            stability_counter = 0;
+                        end
+                    end
+                    prev_cost = current_cost;
+                    iteration = iteration + 1;
                 end
-                prev_cost = current_cost;
-                iteration = iteration + 1;
+                
+                % --- CHECK IF THIS TRIAL IS THE BEST ---
+                if current_cost < bestCost
+                    bestCost = current_cost;
+                    bestTransMat = currentTransMat;                    
+                    bestCostList = [bestCostList bestCost];
+                    bestNoisyTransMat = noisyGtTransMat;
+                else
+                    badCostList = [badCostList current_cost];
+                end                
             end
             duration = toc;
-            % if stability_counter == 100
-                % fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, current_cost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
-                if stability_counter == 500 
-                    fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, current_cost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
+            % figure(13), plot(bestCostList)
+            % figure(14), plot(badCostList)
+            
+            %fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, bestCost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
+
+
+            %if stability_counter == 100
+                %fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, bestCost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
+                %if bestCost > 100 
+                    fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, bestCost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
                     
                     % 2. Extract Rotation Matrix (3x3) and Translation Vector (3x1)
                     R_gt = gtTransMat(1:3, 1:3);
                     t_gt = gtTransMat(1:3, 4);
 
-                    R_noisy = noisyGtTransMat(1:3, 1:3);
-                    t_noisy = noisyGtTransMat(1:3, 4);
+                    R_noisy = bestNoisyTransMat(1:3, 1:3);
+                    t_noisy = bestNoisyTransMat(1:3, 4);
 
-                    R_est = currentTransMat(1:3, 1:3);
-                    t_est = currentTransMat(1:3, 4);                    
+                    R_est = bestTransMat(1:3, 1:3);
+                    t_est = bestTransMat(1:3, 4);                    
 
                     % 3. Convert Rotation to Euler Angles
                     % Using 'ZYX' convention (Yaw, Pitch, Roll) to match your previous code
@@ -231,14 +255,15 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
                     % fprintf('Pitch   (Z): (%.4f) - (%.4f) - (%.4f)\n', yaw_deg, yawN_deg, yawEst_deg);    
 
                     fprintf('---------------------------------------------------------------------------\n');
-                end
-                resNormArr = [resNormArr current_cost];
+                %end
+                %end
+                resNormArr = [resNormArr bestCost];
 
 
 
             % end
             % --- FINAL VISUALIZATION ---
-            if PLOT_FIGURES && current_cost > 100.0%stability_counter == COST_STABILITY_PATIENCE
+            if PLOT_FIGURES && bestCost > 100.0%stability_counter == COST_STABILITY_PATIENCE
                 % 1. Transform cloud to FINAL estimated pose
                 moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
 
@@ -252,7 +277,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
                     all_best_indices(k) = idx;
                 end              
 
-                 yawErr, transErr
+                 % yawErr, transErr
 
 
                 % 3. Visualize Everything At Once
@@ -322,12 +347,12 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
 
             % 3. Extract final Estimated Rotation/Translation from Matrix
             % (Assuming currentTransMat was updated with final result)
-            R_est_final = currentTransMat(1:3, 1:3);
-            t_est_final = currentTransMat(1:3, 4);
+            R_est_final = bestTransMat(1:3, 1:3);
+            t_est_final = bestTransMat(1:3, 4);
 
             % 4. Write to file
             UtilityFunctions.logData(logFid, (r-1)*numSamples + i, resultValidity, ...
-                lmRes, gtTransMat, noisyGtTransMat, ...
+                lmRes, gtTransMat, bestNoisyTransMat, ...
                 R_est_final, t_est_final, duration, ...
                 lossCond, ctrCond);
             
