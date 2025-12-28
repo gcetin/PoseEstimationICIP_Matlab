@@ -1,23 +1,15 @@
-function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES, NUM_REPEATS)
-    % Main entry point for Pose Estimation
-    % clc; clear; close all;
-
-    % % Configuration
-    % folderNameList = {'DataFolder_1920x1080_500_IDEAL_REL_MOTION_TRANS_XYZ_EIGHT'};
-    % transErrList = {[0.0, 0.0, 0.0]};
-    % angErrList = [0.0];
-
+function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES, NUM_REPEATS, opts)
     for f = 1:length(folderNameList)
         for t = 1:length(transErrList)
             for a = 1:length(angErrList)
-                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES, NUM_REPEATS);
+                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES, NUM_REPEATS, opts);
             end
         end
     end
 end
 
 
-function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES, NUM_REPEATS)
+function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES, NUM_REPEATS, opts)
   
     % Setup Paths
     PARTITION_NAME = 'D:\';
@@ -32,8 +24,8 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     Params = GenSyntheticDataTypes();
     
     % Load Data
-    [gtDataDict, trajData] = DataLoader.LoadInOutData(expDirName);
-    
+    [gtDataDict, trajData, idealTgtTraj3d, noisyTgtTraj3d] = DataLoader.LoadInOutData(expDirName);
+
     % Parse config from folder name
     [numSamples, ~, appendFlag, noiseFlag, shapeType] = UtilityFunctions.parse_folder_name(expFolderName);
     
@@ -48,17 +40,26 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     idealPts3d = TrajectoryGenerator.sample_trajectory(moreDense3d, 5);
 
     % Optimization Settings
-    MAX_ITERATIONS = 5000;
-    MIN_COST_THRESHOLD = 1e-3;
-    REL_COST_DELTA = 1e-6;
-    COST_STABILITY_PATIENCE = 500;
+    % MAX_ITERATIONS = 5000;
+    % MIN_COST_THRESHOLD = 20.0;%1e-3;
+    % REL_COST_DELTA = 1e-3;%1e-6;
+    % COST_STABILITY_PATIENCE = 10; %500
+
+    % Optimization Settings
+    % opts.MaxIterations = 5000;
+    % opts.MinCostThreshold = 20.0;     % 1e-3
+    % opts.RelCostDelta = 1e-3;         % 1e-6
+    % opts.StabilityPatience = 10;      % 500
+    % opts.MaxTrial = 1000;
+    
+    %MAX_TRIAL = 1000;
 
     % Logging setup (Skipped file creation for brevity, printing to console)
     fprintf('Starting Experiment: %s\n', expFolderName);
 
     % --- LOGGING SETUP START ---
     logFileName = UtilityFunctions.build_log_file_name(...
-        expFolderName, angStd, transStd, MAX_ITERATIONS, MIN_COST_THRESHOLD);
+        expFolderName, angStd, transStd, opts.MaxIterations, opts.MinCostThreshold);
     
     fprintf('Logging to: Logs/%s\n', logFileName);
     logFid = UtilityFunctions.createLogDataFiles(logFileName);
@@ -66,6 +67,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
 
     % NUM_REPEATS = 1;
     resNormArr = [];
+    noisyTrajRmseList = [];
 
 
     % Levenberg-Marquardt Options
@@ -78,6 +80,12 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
             % Get observed 2D points (N x 2)
             point2d = squeeze(trajData(i, :, :));
             numPoints = size(point2d, 1);
+            
+            idealTraj = squeeze(idealTgtTraj3d(i,:,:));
+            noisytTraj = squeeze(noisyTgtTraj3d(i,:,:));
+
+            noisyMotionMetric = UtilityFunctions.pointwiseErrors(idealTraj, noisytTraj, false);
+            noisyTrajRmse = noisyMotionMetric.rmse;
 
             % Precompute rays (Identity camera)
             [rayOrigins, rayDirections] = UtilityFunctions.precompute_camera_rays_identity(point2d, Params.KK);
@@ -90,7 +98,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
             badCostList = [];
             tic;
 
-            for trialIdx=1:100 
+            for trialIdx=1:opts.MaxTrial 
             
                 % Add Noise for initialization
                 [noisyGtTransMat, yawErr, transErr] = UtilityFunctions.addNoiseToPose(gtTransMat, angStd, transStd);
@@ -127,7 +135,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
             
                 % --- Iterative Refinement ---
                 iteration = 0;
-                while (iteration < MAX_ITERATIONS) && (current_cost > MIN_COST_THRESHOLD) && (stability_counter < COST_STABILITY_PATIENCE)
+                while (iteration < opts.MaxIterations) && (current_cost > opts.MinCostThreshold) && (stability_counter < opts.StabilityPatience)
                     
                     % 1. Convert Dense Cloud to Camera Frame using CURRENT Pose
                     % (3 x N)
@@ -177,7 +185,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
                     % Convergence Check
                     if isfinite(prev_cost)
                         rel_imp = abs(prev_cost - current_cost) / max(abs(prev_cost), 1e-12);
-                        if rel_imp < REL_COST_DELTA
+                        if rel_imp < opts.RelCostDelta
                             stability_counter = stability_counter + 1;
                         else
                             stability_counter = 0;
@@ -207,7 +215,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
             %if stability_counter == 100
                 %fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, bestCost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
                 %if bestCost > 100 
-                    fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f\n', i, iteration, bestCost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3));
+                    fprintf('Sample %d | Iter: %d | Cost: %.4f | StabilityCounter: %d | yawErr: %.1f | transErrX: %.1f | transErrY: %.1f | transErrZ: %.1f | noisyTrajRmse: %.2f\n', i, iteration, bestCost, stability_counter, yawErr, transErr(1), transErr(2), transErr(3), noisyTrajRmse);
                     
                     % 2. Extract Rotation Matrix (3x3) and Translation Vector (3x1)
                     R_gt = gtTransMat(1:3, 1:3);
@@ -249,7 +257,7 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
                     fprintf('Y: (%.4f) - (%.4f) - (%.4f) - (%.4f)\n', t_gt(2), t_noisy(2), t_est(2), abs(t_gt(2)-t_est(2)));
                     fprintf('Z: (%.4f) - (%.4f) - (%.4f) - (%.4f)\n', t_gt(3), t_noisy(3), t_est(3), abs(t_gt(3)-t_est(3)));
                     
-                    fprintf('\n--- Rotation (Degrees)  (gt - noisy - estimated)  ---\n');
+                    fprintf('\n--- Rotation (Degrees)  (gt - noisy - estimated - abs(error))  ---\n');
                     % fprintf('Roll  (X): (%.4f) - (%.4f) - (%.4f)\n', roll_deg, rollN_deg, rollEst_deg);
                     fprintf('Yaw (Y): (%.4f) - (%.4f) - (%.4f) - (%.4f)\n', pitch_deg, pitchN_deg, pitchEst_deg, abs(pitch_deg - pitchEst_deg));
                     % fprintf('Pitch   (Z): (%.4f) - (%.4f) - (%.4f)\n', yaw_deg, yawN_deg, yawEst_deg);    
@@ -258,12 +266,13 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
                 %end
                 %end
                 resNormArr = [resNormArr bestCost];
+                noisyTrajRmseList = [noisyTrajRmseList noisyTrajRmse];              
 
 
 
             % end
             % --- FINAL VISUALIZATION ---
-            if PLOT_FIGURES && bestCost > 100.0%stability_counter == COST_STABILITY_PATIENCE
+            if PLOT_FIGURES && bestCost > 100.0%stability_counter == opts.StabilityPatience
                 % 1. Transform cloud to FINAL estimated pose
                 moreDense3dInCamFrame = UtilityFunctions.convertWorldPtIntoCamFrame(moreDense3d, currentTransMat);
 
@@ -326,9 +335,9 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
             % --- LOGGING DATA START ---
             
             % 1. Determine Validity flags
-            converged_on_delta = (stability_counter >= COST_STABILITY_PATIENCE);
-            lossCond = (current_cost <= MIN_COST_THRESHOLD) || converged_on_delta;
-            ctrCond = (iteration >= MAX_ITERATIONS);
+            converged_on_delta = (stability_counter >= opts.StabilityPatience);
+            lossCond = (current_cost <= opts.MinCostThreshold) || converged_on_delta;
+            ctrCond = (iteration >= opts.MaxIterations);
             
             resultValidity = 0;
             if lossCond
@@ -369,4 +378,6 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     fclose(logFid);
 
     figure(123214), plot(resNormArr)
+    figure(121234), plot(noisyTrajRmseList)
+
 end

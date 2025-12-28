@@ -563,5 +563,63 @@ classdef UtilityFunctions
             legend('show', 'Location', 'best');
             hold off;
         end
+
+        function metrics = pointwiseErrors(P, Q, visualize)
+            %POINTWISEERRORS Compute point-wise distortion metrics and visualize
+            %
+            % INPUTS
+            %   P         : (N x 3) reference point cloud (Ideal)
+            %   Q         : (N x 3) distorted point cloud (Noisy)
+            %   visualize : (bool) Optional, set true to plot the trajectories
+            
+            if nargin < 3, visualize = false; end
+        
+            % ---- Input checks ----
+            if size(P,2) ~= 3 || size(Q,2) ~= 3
+                error('P and Q must be Nx3 matrices.');
+            end
+            if size(P,1) ~= size(Q,1)
+                error('P and Q must have the same number of points.');
+            end
+        
+            % ---- Displacements ----
+            deltas = Q - P;                 % (N x 3)
+            errors = sqrt(sum(deltas.^2,2)); % Euclidean distance per point
+        
+            % ---- Metrics ----
+            metrics.rmse        = sqrt(mean(errors.^2));
+            metrics.mean        = mean(errors);
+            metrics.median      = median(errors);
+            metrics.p95         = prctile(errors, 95);
+            metrics.max         = max(errors);
+            metrics.perAxisRMSE = sqrt(mean(deltas.^2,1));
+        
+            metrics.errors = errors;
+            metrics.deltas = deltas;
+        
+            % ---- Visualization ----
+            if visualize
+                figure('Name', 'Trajectory Error Visualization', 'Color', 'w');
+                hold on; grid on; axis equal;
+                
+                % Plot Ideal Trajectory
+                plot3(P(:,1), P(:,2), P(:,3), 'b-o', 'LineWidth', 2, 'MarkerSize', 4, 'DisplayName', 'Ideal Trajectory');
+                
+                % Plot Noisy Trajectory
+                plot3(Q(:,1), Q(:,2), Q(:,3), 'r--x', 'LineWidth', 1.5, 'MarkerSize', 4, 'DisplayName', 'Noisy Trajectory');
+                
+                % Plot Error Vectors (Quiver)
+                % Draws arrows from Ideal (P) to Noisy (Q)
+                quiver3(P(:,1), P(:,2), P(:,3), deltas(:,1), deltas(:,2), deltas(:,3), 0, ...
+                    'Color', [0.5 0.5 0.5], 'LineStyle', ':', 'DisplayName', 'Error Vectors');
+                
+                xlabel('X (m)'); ylabel('Y (m)'); zlabel('Z (m)');
+                title(sprintf('Trajectory Comparison (RMSE: %.4f)', metrics.rmse));
+                legend('Location', 'best');
+                view(3); % Set to 3D perspective
+                pause;
+            end
+        end
+        
     end
 end

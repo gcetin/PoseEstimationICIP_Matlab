@@ -1,6 +1,6 @@
 classdef DataLoader
     methods (Static)
-        function [gtDataDict, trajData] = LoadInOutData(dirName)
+        function [gtDataDict, trajData, idealTgtTraj3d, noisyTgtTraj3d] = LoadInOutData(dirName)
             % 1. Load Ground Truth
             gtFile = fullfile(dirName, 'ground_truth_data.txt');
             opts = detectImportOptions(gtFile, 'FileType', 'text');
@@ -22,6 +22,8 @@ classdef DataLoader
             [T, ~] = size(temp);
             
             trajData = zeros(numSamples, T, 2);
+            idealTgtTraj3d = zeros(numSamples, T, 3);
+            noisyTgtTraj3d = zeros(numSamples, T, 3);
             
             % Can use parfor here for speed if many files
             parfor i = 1:numSamples
@@ -29,6 +31,8 @@ classdef DataLoader
                 data = readmatrix(fname, 'FileType', 'text');
                 % Columns 1,2 are x,y (0-based index in description, 1,2 here)
                 trajData(i, :, :) = data(:, 1:2);
+                idealTgtTraj3d(i, :, :) = data(:, 6:8);
+                noisyTgtTraj3d(i, :, :) = data(:, 9:11);
             end
         end
     end
