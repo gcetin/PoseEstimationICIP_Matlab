@@ -4,16 +4,25 @@ classdef TrajectoryGenerator
             SHAPE_SIZE = 5.0;
             t = 0:dense_deltaT:(2*pi);
             
-            if shapeType == 0 % EIGHT
+            if shapeType == 0 % EIGHT2D
                 Y_ideal = SHAPE_SIZE * sin(t);
                 X_ideal = SHAPE_SIZE * sin(t) .* cos(t);
+                Z_ideal = zeros(size(t));
+            elseif shapeType == 4 % EIGHT3D
+                S = SHAPE_SIZE;
+                zScale = 0.4;
+                zPhaseRad = pi/4;
+                X_ideal = S .* sin(t) .* cos(t);
+                Y_ideal = S .* sin(t);
+                Z_ideal = (zScale * S) .* sin(t + zPhaseRad);
             else
                 % Circle fallback
                 X_ideal = SHAPE_SIZE * cos(t);
                 Y_ideal = SHAPE_SIZE * sin(t);
+                Z_ideal = zeros(size(t));
             end
             
-            Z_ideal = zeros(size(t));
+            
             points = [X_ideal; Y_ideal; Z_ideal];
             
             if appendFlag

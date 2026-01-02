@@ -11,8 +11,8 @@ classdef UtilityFunctions
             
             % Map 1: DataGenShapeType (Suffix -> Integer Value)
             % Python: EIGHT=0, QUATREFOIL=1, CIRCLE=2, HEART=3
-            keys_shapes = {'_EIGHT', '_QUATREFOIL', '_CIRCLE', '_HEART'};
-            vals_shapes = {0, 1, 2, 3}; 
+            keys_shapes = {'_EIGHT2D', '_QUATREFOIL', '_CIRCLE', '_HEART', '_EIGHT3D'};
+            vals_shapes = {0, 1, 2, 3, 4}; 
             ShapeSuffixDict = containers.Map(keys_shapes, vals_shapes);
         
             % Map 2: DataGenOutType (Suffix -> Integer Value)
@@ -293,7 +293,7 @@ classdef UtilityFunctions
             end
         end
 
-        function logFileName = build_log_file_name(expFolderName, angStd, transStd, max_its, min_cost)
+        function logFileName = build_log_file_name(expFolderName, angStd, transStd, max_its, min_cost, maxTrial)
             % Helper to format the log filename
             ang_str = sprintf('%g', angStd);
 
@@ -303,8 +303,8 @@ classdef UtilityFunctions
                 trans_str = sprintf('%g', transStd);
             end
 
-            logFileName = sprintf('%s_%dit_%gminCost_ang%s_trans%s.txt', ...
-                expFolderName, max_its, min_cost, ang_str, trans_str);
+            logFileName = sprintf('%s_%dit_%gminCost_%dmaxTrial_ang%s_trans%s.txt', ...
+                expFolderName, max_its, min_cost, maxTrial, ang_str, trans_str);
         end
 
         function fid = createLogDataFiles(fileName)
@@ -411,7 +411,7 @@ classdef UtilityFunctions
                 lmRes.cost, lmRes.optimality, lmRes.funcCount, lmRes.iterations, 1, 1, ...
                 errAng, ...
                 rot_vec_deg', rot_err_mag, ...
-                0.0, lossCond, ctrCond, ...
+                duration, lossCond, ctrCond, ...
                 noise_ang_mag, noise_trans_mag); % <--- Added new variables
         end
             

@@ -9,10 +9,11 @@ classdef GenSyntheticDataTypes
         MIN_Z_DIST_FROM_CAM = 15.0;
         
         % Shape Types (Enums simulated as constants)
-        SHAPE_EIGHT = 0;
+        SHAPE_EIGHT2D = 0;
         SHAPE_QUATREFOIL = 1;
         SHAPE_CIRCLE = 2;
         SHAPE_HEART = 3;
+        SHAPE_EIGHT3D = 4;
     end
     
     properties (Dependent)
