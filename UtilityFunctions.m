@@ -269,6 +269,112 @@ classdef UtilityFunctions
             r = diff(:); % Flatten
         end
 
+        function r = residualsWeightedRobustPrior(pose, pts3d, pts2dObs, K, priorPose, opts)
+            % residualsWeightedRobustPrior
+            %
+            % Residual function for lsqnonlin that is robust to your
+            % random-walk (cumulative) motion noise by:
+            %   1) Time-dependent whitening: sigma_k = sigma_px * sqrt(k)
+            %   2) Robust loss (Huber or Cauchy) applied per 2D point
+            %   3) Pose prior (MAP) around 'priorPose' using known init uncertainty
+            %
+            % Inputs:
+            %   pose      : 1x6 [rx ry rz tx ty tz]  (Rodrigues rotvec + translation)
+            %   pts3d     : 3xN object/world points corresponding to each 2D obs
+            %   pts2dObs  : Nx2 observed pixels
+            %   K         : 3x3 intrinsics
+            %   priorPose : 1x6 prior pose (typically the noisy init)
+            %   opts      : struct with fields (all optional):
+            %       .sigma_px (default 2.0)
+            %       .useTimeWeighting (default true)
+            %       .lossType (default 'cauchy')  % 'huber'|'cauchy'|'none'
+            %       .huberK (default 1.345)
+            %       .cauchyC (default 2.0)
+            %       .sigma_t (default [2;2;5])
+            %       .sigma_yaw_deg (default 5.0)
+
+            % ---- Defaults ----
+            if ~isfield(opts, 'sigma_px');         opts.sigma_px = 2.0; end
+            if ~isfield(opts, 'useTimeWeighting'); opts.useTimeWeighting = true; end
+            if ~isfield(opts, 'lossType');         opts.lossType = 'cauchy'; end
+            if ~isfield(opts, 'huberK');           opts.huberK = 1.345; end
+            if ~isfield(opts, 'cauchyC');          opts.cauchyC = 2.0; end
+            if ~isfield(opts, 'sigma_t');          opts.sigma_t = [2;2;5]; end
+            if ~isfield(opts, 'sigma_yaw_deg');    opts.sigma_yaw_deg = 5.0; end
+
+            % ---- Project using current pose ----
+            rVec = pose(1:3);
+            tVec = pose(4:6);
+            R = UtilityFunctions.rodrigues(rVec);
+
+            pts3d_h = [pts3d; ones(1, size(pts3d,2))];
+            T = eye(4);
+            T(1:3,1:3) = R;
+            T(1:3,4) = tVec(:);
+
+            p_cam = T * pts3d_h;
+            p_cam = p_cam(1:3, :) ./ p_cam(4, :);
+            uv_hom = K * p_cam;
+            uv = uv_hom(1:2, :) ./ uv_hom(3, :);
+
+            % ---- 2D residuals (Nx2) ----
+            diff2 = uv' - pts2dObs; % Nx2
+
+            % ---- Time-dependent whitening for random-walk drift ----
+            if opts.useTimeWeighting
+                N = size(diff2,1);
+                k = (1:N)';
+                sigma_k = opts.sigma_px .* sqrt(k); % Nx1
+                diff2(:,1) = diff2(:,1) ./ sigma_k;
+                diff2(:,2) = diff2(:,2) ./ sigma_k;
+            else
+                diff2 = diff2 ./ opts.sigma_px;
+            end
+
+            % ---- Robust weighting per point (apply same weight to x/y) ----
+            w = ones(size(diff2,1),1);
+            e_norm = sqrt(diff2(:,1).^2 + diff2(:,2).^2);
+            switch lower(opts.lossType)
+                case 'huber'
+                    kHub = opts.huberK;
+                    idx = e_norm > kHub;
+                    w(idx) = kHub ./ max(e_norm(idx), 1e-12);
+                case 'cauchy'
+                    c = opts.cauchyC;
+                    w = 1 ./ (1 + (e_norm./c).^2);
+                otherwise
+                    % 'none'
+            end
+            diff2(:,1) = sqrt(w) .* diff2(:,1);
+            diff2(:,2) = sqrt(w) .* diff2(:,2);
+
+            % ---- Pose prior (MAP) around priorPose ----
+            priorPose = priorPose(:)';
+            r_prior = [];
+            if ~isempty(priorPose)
+                % Translation prior
+                t0 = priorPose(4:6);
+                r_t = (tVec(:) - t0(:)) ./ opts.sigma_t(:);
+
+                % Yaw prior only (ZYX yaw is first component from rotm2eul)
+                R0 = UtilityFunctions.rodrigues(priorPose(1:3));
+                eul0 = rotm2eul(R0, 'ZYX');
+                eul  = rotm2eul(R,  'ZYX');
+                dyaw = UtilityFunctions.wrapToPiLocal(eul(1) - eul0(1));
+                r_yaw = dyaw / deg2rad(opts.sigma_yaw_deg);
+
+                r_prior = [r_t; r_yaw];
+            end
+
+            % Flatten residuals
+            r = [diff2(:); r_prior];
+        end
+
+        function ang = wrapToPiLocal(ang)
+            % wrapToPiLocal Wrap angle in radians to [-pi, pi]
+            ang = mod(ang + pi, 2*pi) - pi;
+        end
+
         % --- Math Helpers ---
         function R = rodrigues(r)
             % Simple Rodriguez formula (Rot Vec -> Rot Mat)
