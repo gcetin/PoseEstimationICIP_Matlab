@@ -1,60 +1,24 @@
-function logFileName = PoseEstimationICIP(folderNameList, transErrList, angErrList, PLOT_FIGURES, NUM_REPEATS, opts)
+function logFileName = PoseEstimationICIP_RealData(folderName, transErrList, angErrList, PLOT_FIGURES, NUM_REPEATS, opts)
     logFileName = ''; 
-    for f = 1:length(folderNameList)
+    for f = 1:length(folderName)
         for t = 1:length(transErrList)
             for a = 1:length(angErrList)
-                logFileName = run_experiment(folderNameList{f}, angErrList(a), transErrList{t}, PLOT_FIGURES, NUM_REPEATS, opts);
+                logFileName = run_experiment(folderName, angErrList(a), transErrList{t}, PLOT_FIGURES, NUM_REPEATS, opts);
             end
         end
     end
 end
 
-function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES, NUM_REPEATS, opts)
-    % --- 1. Setup and Data Loading ---
-    PARTITION_NAME = 'D:\';
-    BASE_DIR_NAME = 'DOKTORA\EXPERIMENTS\Dataset_Text_Python\';
-    expDirName = fullfile(PARTITION_NAME, BASE_DIR_NAME, expFolderName, 'Train');
-    
-    if ~exist(expDirName, 'dir')
-        error('Given folder does not exist: %s', expDirName);
+function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGURES, NUM_REPEATS, opts)   
+    if ~exist(expFolderName, 'dir')
+        error('Given folder does not exist: %s', expFolderName);
     end
 
-    Params = GenSyntheticDataTypes();
-    [gtDataDict, trajData, idealTgtTraj3d, noisyTgtTraj3d] = DataLoader.LoadInOutData(expDirName);
-
-    % for i=1: size(idealTgtTraj3d,1)
-    %     % Extract trajectories
-    %     X = [idealTgtTraj3d(i,:,1), noisyTgtTraj3d(i,:,1)];
-    %     Y = [idealTgtTraj3d(i,:,2), noisyTgtTraj3d(i,:,2)];
-    %     Z = [idealTgtTraj3d(i,:,3), noisyTgtTraj3d(i,:,3)];
-    % 
-    %     xlim_all = [min(X), max(X)];
-    %     ylim_all = [min(Y), max(Y)];
-    %     %zlim_all = [min(Z), max(Z)];
-    %     zlim_all = [-5, 5];
-    % 
-    %     figure(1),
-    % 
-    %     subplot(1,2,1)
-    %     plot3(idealTgtTraj3d(i,:,1), idealTgtTraj3d(i,:,2), idealTgtTraj3d(i,:,3), 'b')
-    %     grid on
-    %     axis equal
-    %     xlim(xlim_all); ylim(ylim_all); zlim(zlim_all)
-    %     title('Ideal Trajectory')
-    % 
-    %     subplot(1,2,2)
-    %     plot3(noisyTgtTraj3d(i,:,1), noisyTgtTraj3d(i,:,2), noisyTgtTraj3d(i,:,3), 'r')
-    %     grid on
-    %     axis equal
-    %     xlim(xlim_all); ylim(ylim_all); zlim(zlim_all)
-    %     title('Noisy Trajectory')
-    % 
-    %     pause,
-    % 
-    % end
-
-
-    [numSamples, ~, appendFlag, ~, shapeType] = UtilityFunctions.parse_folder_name(expFolderName);
+    Params = GenRealDataTypes();
+    [gtDataDict, trajData] = DataLoader_RealData.LoadInOutData(expFolderName);
+    numSamples = 3;
+    appendFlag = false;
+    shapeType = 0;
     
     % Slicing variables for parfor
     trajData = trajData;
@@ -64,33 +28,33 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     deltaT = Params.deltaT;
     moreDense3d = TrajectoryGenerator.create_dense_trajectory(shapeType, appendFlag, deltaT);
     
-    logFileName = UtilityFunctions.build_log_file_name(expFolderName, angStd, transStd, opts.MaxIterations, opts.MinCostThreshold, opts.MaxTrial);
+    logFileName = UtilityFunctions.build_log_file_name('realDataResults', angStd, transStd, opts.MaxIterations, opts.MinCostThreshold, opts.MaxTrial);
     
     % --- 2. Parallel Progress & ETA Setup ---
-    if isempty(gcp('nocreate')); parpool; end
+    %if isempty(gcp('nocreate')); parpool; end
     
     totalIterations = NUM_REPEATS * numSamples;
     resultsStore = cell(totalIterations, 1);
-    
-    q = parallel.pool.DataQueue();
-    numCompleted = 0;
-    startTime = tic; 
-
-    afterEach(q, @(varargin) updateProgress());
-    
-    function updateProgress()
-        numCompleted = numCompleted + 1;
-        elapsedTime = toc(startTime);
-        avgTimePerTask = elapsedTime / numCompleted;
-        etaSeconds = avgTimePerTask * (totalIterations - numCompleted);
-        
-        etaStr = datestr(etaSeconds/86400, 'HH:MM:SS');
-        if mod(numCompleted, 5) == 0 || numCompleted == totalIterations
-            fprintf('--> [%s] Progress: %d/%d (%.1f%%) | ETA: %s\n', ...
-                datestr(now, 'HH:MM:SS'), numCompleted, totalIterations, ...
-                (numCompleted/totalIterations)*100, etaStr);
-        end
-    end
+ 
+    % q = parallel.pool.DataQueue();
+    % numCompleted = 0;
+    % startTime = tic; 
+    % 
+    % afterEach(q, @(varargin) updateProgress());
+    % 
+    % function updateProgress()
+    %     numCompleted = numCompleted + 1;
+    %     elapsedTime = toc(startTime);
+    %     avgTimePerTask = elapsedTime / numCompleted;
+    %     etaSeconds = avgTimePerTask * (totalIterations - numCompleted);
+    % 
+    %     etaStr = datestr(etaSeconds/86400, 'HH:MM:SS');
+    %     if mod(numCompleted, 5) == 0 || numCompleted == totalIterations
+    %         fprintf('--> [%s] Progress: %d/%d (%.1f%%) | ETA: %s\n', ...
+    %             datestr(now, 'HH:MM:SS'), numCompleted, totalIterations, ...
+    %             (numCompleted/totalIterations)*100, etaStr);
+    %     end
+    % end
 
     % Optimization Options
     options = optimoptions('lsqnonlin', 'Algorithm', 'levenberg-marquardt', ...
@@ -100,10 +64,11 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
     fprintf('\nStarting Parallel experiment: %s\n', expFolderName);
 
     % --- 3. Parallel Loop (Flattened) ---
-    parfor k = 1:totalIterations
+    for k = 1:totalIterations
         % Map linear index k to repeat index r and sample index i
         r = ceil(k / numSamples);
         i = mod(k-1, numSamples) + 1;
+
         
         % Extract data for this sample
         point2d = squeeze(trajData(i, :, :));
@@ -190,8 +155,10 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
         s.converged = (bestLmRes.cost <= opts.MinCostThreshold);
         
         resultsStore{k} = s;
-        send(q, k);
+        % send(q, k);
+        end
     end
+    
 
     % --- 4. Backup and Text Logging ---
     if ~exist('Logs', 'dir'); mkdir('Logs'); end

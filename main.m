@@ -9,7 +9,13 @@ opts.RelCostDelta = 1e-6;         % 1e-6
 opts.StabilityPatience = 10;      % 500
 opts.MaxTrial = 250;
 
-folderNameList = {'DataFolder_1920x1080_250_NOISY_REL_MOTION_TRANS_XYZ_PAN_3D_EIGHT3D'};
+folderNameList = {'DataFolder_1920x1080_200_NOISY_REL_MOTION_TRANS_XYZ_PAN_3D_EIGHT2D', ...
+                  'DataFolder_1920x1080_200_NOISY_REL_MOTION_TRANS_XYZ_PAN_3D_APP_EIGHT2D', ...
+                  'DataFolder_1920x1080_200_NOISY_REL_MOTION_TRANS_XYZ_PAN_3D_EIGHT3D'};
+
+
+
+% folderNameList = {'DataFolder_1920x1080_50_NOISY_REL_MOTION_TRANS_XYZ_PAN_3D_EIGHT2D'};
 transErrList = {[2.0, 2.0, 5.0]};
 angErrList = 5.0;
 
