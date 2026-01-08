@@ -27,7 +27,7 @@ classdef TrajectoryGenerator
             
             if appendFlag
                 % Rotate 45 deg Z (approx 0.78 rad)
-                eul = [deg2rad(45), 0, 0];
+                eul = [0, deg2rad(45), 0];
                 R = eul2rotm(eul, 'ZYX');
                 points_rot = R * points;
                 points = [points, points_rot];
