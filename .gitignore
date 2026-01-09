@@ -1,7 +1,6 @@
 # exclude everything
 Logs/*
+redundant/*
 
 # exception to the rule
 !Logs/.gitkeep
-
-

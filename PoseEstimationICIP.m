@@ -21,6 +21,39 @@ function logFileName = run_experiment(expFolderName, angStd, transStd, PLOT_FIGU
 
     Params = GenSyntheticDataTypes();
     [gtDataDict, trajData, idealTgtTraj3d, noisyTgtTraj3d] = DataLoader.LoadInOutData(expDirName);
+
+    % for i=1: size(idealTgtTraj3d,1)
+    %     % Extract trajectories
+    %     X = [idealTgtTraj3d(i,:,1), noisyTgtTraj3d(i,:,1)];
+    %     Y = [idealTgtTraj3d(i,:,2), noisyTgtTraj3d(i,:,2)];
+    %     Z = [idealTgtTraj3d(i,:,3), noisyTgtTraj3d(i,:,3)];
+    % 
+    %     xlim_all = [min(X), max(X)];
+    %     ylim_all = [min(Y), max(Y)];
+    %     %zlim_all = [min(Z), max(Z)];
+    %     zlim_all = [-5, 5];
+    % 
+    %     figure(1),
+    % 
+    %     subplot(1,2,1)
+    %     plot3(idealTgtTraj3d(i,:,1), idealTgtTraj3d(i,:,2), idealTgtTraj3d(i,:,3), 'b')
+    %     grid on
+    %     axis equal
+    %     xlim(xlim_all); ylim(ylim_all); zlim(zlim_all)
+    %     title('Ideal Trajectory')
+    % 
+    %     subplot(1,2,2)
+    %     plot3(noisyTgtTraj3d(i,:,1), noisyTgtTraj3d(i,:,2), noisyTgtTraj3d(i,:,3), 'r')
+    %     grid on
+    %     axis equal
+    %     xlim(xlim_all); ylim(ylim_all); zlim(zlim_all)
+    %     title('Noisy Trajectory')
+    % 
+    %     pause,
+    % 
+    % end
+
+
     [numSamples, ~, appendFlag, ~, shapeType] = UtilityFunctions.parse_folder_name(expFolderName);
     
     % Slicing variables for parfor
